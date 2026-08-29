@@ -6,20 +6,24 @@ const STATUS="success";
 const PER_PAGE=100;
 const ARTIFACT_PREFIX="minosoft";
 const COOKIE_NAME="minosoft_github_key";
+const PLATFORM_STORAGE="minosoft_platforms";
 const THROBBER="throbber.gif";
 
-const OS=[
+const DEFAULT_OS=[
 ["ubuntu","Linux"],
 ["windows","Windows"],
 ["dummytest1","Dummy"],
 ["macos","macOS"]
 ];
 
-const ARCHS=[
+const DEFAULT_ARCHS=[
 "amd64",
 "dummytest2",
 "aarch64"
 ];
+
+const OS=[];
+const ARCHS=[];
 
 const GH_API=`https://api.github.com/repos/${REPO}`;
 const GH=`https://github.com/${REPO}`;
@@ -58,14 +62,103 @@ ${extra}
 const escapeRegex=v=>
 String(v).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
 
-const OS_PATTERN=OS.map(x=>escapeRegex(x[0])).join("|");
-const ARCH_PATTERN=ARCHS.map(escapeRegex).join("|");
+function loadPlatforms(){
 
-const ARTIFACT_PATTERN=new RegExp(
-`^${escapeRegex(ARTIFACT_PREFIX)}-(${OS_PATTERN})-(${ARCH_PATTERN})$`
+let saved;
+
+try{
+saved=JSON.parse(
+localStorage.getItem(PLATFORM_STORAGE)
+);
+}catch{
+saved=null;
+}
+
+OS.length=0;
+ARCHS.length=0;
+
+if(
+saved&&
+Array.isArray(saved.os)&&
+Array.isArray(saved.archs)&&
+saved.os.length&&
+saved.archs.length
+){
+
+for(const item of saved.os){
+
+if(
+Array.isArray(item)&&
+item.length>=2&&
+String(item[0]).trim()&&
+String(item[1]).trim()
+){
+
+OS.push([
+String(item[0]).trim(),
+String(item[1]).trim()
+]);
+
+}
+}
+
+for(const arch of saved.archs){
+
+if(String(arch).trim())
+ARCHS.push(
+String(arch).trim()
 );
 
+}
+
+}
+
+if(!OS.length)
+OS.push(...DEFAULT_OS);
+
+if(!ARCHS.length)
+ARCHS.push(...DEFAULT_ARCHS);
+}
+
+function savePlatforms(){
+
+try{
+
+localStorage.setItem(
+PLATFORM_STORAGE,
+JSON.stringify({
+os:OS,
+archs:ARCHS
+})
+);
+
+}catch(e){
+
+console.warn(
+"Could not save platform settings:",
+e
+);
+
+}
+}
+
+loadPlatforms();
+
+function artifactPattern(){
+
+const osPattern=
+OS.map(x=>escapeRegex(x[0])).join("|");
+
+const archPattern=
+ARCHS.map(escapeRegex).join("|");
+
+return new RegExp(
+`^${escapeRegex(ARTIFACT_PREFIX)}-(${osPattern})-(${archPattern})$`
+);
+}
+
 function utc(v){
+
 return new Date(v).toLocaleString("en-GB",{
 timeZone:"UTC",
 year:"numeric",
@@ -78,6 +171,7 @@ hour12:false
 }
 
 function errorHTML(e){
+
 const status=e.status??"Unknown";
 const url=e.url??"Unknown";
 const body=e.body??"";
@@ -114,17 +208,23 @@ rate limit has been reached.
 }
 
 async function get(url){
+
 const headers={
 "Accept":"application/vnd.github+json"
 };
 
 if(githubKey)
-headers["Authorization"]=`Bearer ${githubKey}`;
+headers["Authorization"]=
+`Bearer ${githubKey}`;
 
-const response=await fetch(url,{headers});
-const body=await response.text();
+const response=
+await fetch(url,{headers});
+
+const body=
+await response.text();
 
 if(!response.ok){
+
 const e=new Error(
 `HTTP ${response.status} ${response.statusText}`
 );
@@ -137,9 +237,13 @@ throw e;
 }
 
 try{
+
 return JSON.parse(body);
+
 }catch{
-const e=new Error("Response was not valid JSON");
+
+const e=
+new Error("Response was not valid JSON");
 
 e.status=response.status;
 e.url=url;
@@ -147,23 +251,31 @@ e.body=body;
 
 throw e;
 }
+
 }
 
 async function getAll(url,key){
+
 const out=[];
 let page=1;
 
 while(true){
 
-const separator=url.includes("?")?"&":"?";
+const separator=
+url.includes("?")?"&":"?";
 
-const data=await get(
+const data=
+await get(
 `${url}${separator}per_page=${PER_PAGE}&page=${page}`
 );
 
-const items=key?data[key]:data;
+const items=
+key?data[key]:data;
 
-if(!Array.isArray(items)||!items.length)
+if(
+!Array.isArray(items)||
+!items.length
+)
 break;
 
 out.push(...items);
@@ -178,10 +290,17 @@ return out;
 }
 
 function releaseAsset(release,os,arch){
-return(release.assets||[]).find(asset=>{
-const name=(asset.name||"").toLowerCase();
 
-return name.includes(os)&&name.includes(arch);
+return(release.assets||[]).find(asset=>{
+
+const name=
+(asset.name||"").toLowerCase();
+
+return(
+name.includes(os.toLowerCase())&&
+name.includes(arch.toLowerCase())
+);
+
 });
 }
 
@@ -195,7 +314,8 @@ let buttons="";
 
 for(const arch of ARCHS){
 
-const asset=releaseAsset(
+const asset=
+releaseAsset(
 release,
 os,
 arch
@@ -205,10 +325,12 @@ if(!asset)
 continue;
 
 buttons+=linkHTML(
-asset.browser_download_url||asset.url,
+asset.browser_download_url||
+asset.url,
 arch,
 `<span class="asset-name">${esc(asset.name)}</span>`
 );
+
 }
 
 if(!buttons)
@@ -220,6 +342,7 @@ systems+=`
 <div class="buttons">${buttons}</div>
 </div>
 `;
+
 }
 
 if(!systems){
@@ -229,7 +352,14 @@ systems=`
 No matching platform downloads found.
 </div>
 `;
+
 }
+
+systems+=`
+<small class="tip">
+Tip: Want to run Minosoft on Android? Download the <b>Linux AARCH64</b> version, extract the ZIP, then open the <b>.jar</b> file with a Java emulator (NOT J2ME!) using its <b>“Open as Swing App”</b> option.
+</small>
+`;
 
 const name=
 release.name||
@@ -300,14 +430,20 @@ async function loadReleases(){
 const box=
 document.getElementById("releases");
 
+if(!box)
+return;
+
 try{
 
 const releases=
 await getAll(RELEASE_URL);
 
-document.getElementById(
-"release-count"
-).textContent=`(${releases.length})`;
+const count=
+document.getElementById("release-count");
+
+if(count)
+count.textContent=
+`(${releases.length})`;
 
 if(!releases.length){
 
@@ -325,7 +461,9 @@ releases.map(renderRelease).join("");
 
 }catch(e){
 
-box.innerHTML=errorHTML(e);
+box.innerHTML=
+errorHTML(e);
+
 }
 }
 
@@ -355,7 +493,8 @@ new Date(a.created_at)
 
 async function getArtifacts(runId){
 
-const data=await get(
+const data=
+await get(
 `${RUNS_URL}/${runId}/artifacts?per_page=${PER_PAGE}`
 );
 
@@ -365,6 +504,7 @@ return data.artifacts||[];
 function makeArtifactMap(artifacts){
 
 const result={};
+const pattern=artifactPattern();
 
 for(const artifact of artifacts){
 
@@ -372,7 +512,7 @@ if(artifact.expired)
 continue;
 
 const match=
-artifact.name.match(ARTIFACT_PATTERN);
+artifact.name.match(pattern);
 
 if(!match)
 continue;
@@ -380,6 +520,7 @@ continue;
 result[
 `${match[1]}:${match[2]}`
 ]=artifact;
+
 }
 
 return result;
@@ -408,6 +549,7 @@ buttons+=linkHTML(
 `${GH}/actions/runs/${run.id}/artifacts/${artifact.id}`,
 arch
 );
+
 }
 
 if(!buttons)
@@ -426,6 +568,7 @@ ${buttons}
 
 </div>
 `;
+
 }
 
 if(!systems)
@@ -496,6 +639,9 @@ async function loadSnapshots(){
 const box=
 document.getElementById("snapshots");
 
+if(!box)
+return;
+
 try{
 
 const runs=
@@ -547,21 +693,30 @@ continue;
 
 html+=rendered;
 count++;
+
 }
 
-box.innerHTML=html||`
+box.innerHTML=
+html||`
 <div class="empty">
 No downloadable snapshots found.
 </div>
 `;
 
+const countBox=
 document.getElementById(
 "snapshot-count"
-).textContent=`(${count})`;
+);
+
+if(countBox)
+countBox.textContent=
+`(${count})`;
 
 }catch(e){
 
-box.innerHTML=errorHTML(e);
+box.innerHTML=
+errorHTML(e);
+
 }
 }
 
@@ -573,10 +728,20 @@ document.getElementById("releases");
 const snapshots=
 document.getElementById("snapshots");
 
-document.getElementById("status").textContent=
+if(!releases||!snapshots)
+return;
+
+const status=
+document.getElementById("status");
+
+if(status){
+
+status.textContent=
 githubKey?
 "Fetching versions with GitHub authentication…":
 "Fetching versions…";
+
+}
 
 releases.innerHTML=
 loadingHTML("Loading releases…");
@@ -592,19 +757,27 @@ loadSnapshots()
 const r=
 document.getElementById(
 "release-count"
-).textContent||"(0)";
+)?.textContent||"(0)";
 
 const s=
 document.getElementById(
 "snapshot-count"
-).textContent||"(0)";
+)?.textContent||"(0)";
 
-document.getElementById("status").textContent=
+if(status){
+
+status.textContent=
 `${r.slice(1,-1)} releases · ${s.slice(1,-1)} snapshots`;
+
+}
+
 }
 
 function setGitHubKey(key){
-githubKey=String(key||"").trim();
+
+githubKey=
+String(key||"").trim();
+
 }
 
 function getCookieKey(){
@@ -628,7 +801,9 @@ item.substring(prefix.length)
 }catch{
 
 return "";
+
 }
+
 }
 
 return "";
@@ -658,137 +833,402 @@ document.getElementById("github-key");
 const devStatus=
 document.getElementById("dev-status");
 
+function devMessage(text){
+
+if(devStatus)
+devStatus.textContent=text;
+
+}
+
 function renderPlatformOptions(){
 
-const osBox=document.getElementById("dev-os");
-const archBox=document.getElementById("dev-arch");
+const osBox=
+document.getElementById("dev-os");
 
-osBox.innerHTML=OS.map(([id,name])=>`
+const archBox=
+document.getElementById("dev-arch");
+
+/*
+Developer Options are optional.
+
+If the HTML does not contain either
+platform container, simply do nothing.
+The rest of the website continues normally.
+*/
+
+if(!osBox&&!archBox)
+return;
+
+if(osBox){
+
+osBox.innerHTML=`
+<div class="platform-list">
+
+${OS.map(([id,name])=>`
 <label>
+
 <input
 type="checkbox"
 name="dev-os"
 value="${esc(id)}"
 checked
 >
-${esc(name)}
-</label>
-`).join("");
 
-archBox.innerHTML=ARCHS.map(arch=>`
+${esc(name)}
+<code>${esc(id)}</code>
+
+</label>
+`).join("")}
+
+</div>
+
+<div class="platform-add">
+
+<button
+type="button"
+id="add-os"
+>
+Add OS
+</button>
+
+</div>
+`;
+
+const addOS=
+document.getElementById("add-os");
+
+if(addOS){
+
+addOS.addEventListener(
+"click",
+()=>{
+
+const id=
+prompt(
+"OS identifier used in artifact names:"
+);
+
+if(!id)
+return;
+
+const cleanId=
+id.trim().toLowerCase();
+
+if(!/^[a-z0-9_-]+$/.test(cleanId)){
+
+devMessage(
+"Invalid OS identifier."
+);
+
+return;
+}
+
+if(OS.some(x=>x[0]===cleanId)){
+
+devMessage(
+"That OS already exists."
+);
+
+return;
+}
+
+const name=
+prompt(
+"Display name for this OS:",
+cleanId
+);
+
+if(!name||!name.trim())
+return;
+
+OS.push([
+cleanId,
+name.trim()
+]);
+
+savePlatforms();
+renderPlatformOptions();
+
+devMessage(
+`Added OS: ${name.trim()}`
+);
+
+}
+);
+
+}
+
+}
+
+if(archBox){
+
+archBox.innerHTML=`
+<div class="platform-list">
+
+${ARCHS.map(arch=>`
 <label>
+
 <input
 type="checkbox"
 name="dev-arch"
 value="${esc(arch)}"
 checked
 >
+
 ${esc(arch)}
+
 </label>
-`).join("");
+`).join("")}
+
+</div>
+
+<div class="platform-add">
+
+<button
+type="button"
+id="add-arch"
+>
+Add architecture
+</button>
+
+</div>
+`;
+
+const addArch=
+document.getElementById("add-arch");
+
+if(addArch){
+
+addArch.addEventListener(
+"click",
+()=>{
+
+const value=
+prompt(
+"Architecture identifier:"
+);
+
+if(!value)
+return;
+
+const arch=
+value.trim().toLowerCase();
+
+if(!/^[a-z0-9_-]+$/.test(arch)){
+
+devMessage(
+"Invalid architecture identifier."
+);
+
+return;
+}
+
+if(ARCHS.includes(arch)){
+
+devMessage(
+"That architecture already exists."
+);
+
+return;
+}
+
+ARCHS.push(arch);
+
+savePlatforms();
+renderPlatformOptions();
+
+devMessage(
+`Added architecture: ${arch}`
+);
+
+}
+);
+
+}
+
+}
+
 }
 
 function applyPlatformOptions(){
 
-const os=[
+const osInputs=
+document.querySelectorAll(
+'input[name="dev-os"]'
+);
+
+const archInputs=
+document.querySelectorAll(
+'input[name="dev-arch"]'
+);
+
+/*
+If Developer Options HTML isn't present,
+there is nothing to apply.
+*/
+
+if(!osInputs.length&&!archInputs.length)
+return;
+
+const selectedOS=[
 ...document.querySelectorAll(
 'input[name="dev-os"]:checked'
 )
-].map(x=>{
+]
+.map(input=>
+OS.find(
+os=>os[0]===input.value
+)
+)
+.filter(Boolean);
 
-const found=OS.find(o=>o[0]===x.value);
-
-return found;
-}).filter(Boolean);
-
-const archs=[
+const selectedArchs=[
 ...document.querySelectorAll(
 'input[name="dev-arch"]:checked'
 )
-].map(x=>x.value);
+]
+.map(input=>input.value);
 
-if(!os.length||!archs.length){
+if(
+!selectedOS.length||
+!selectedArchs.length
+){
 
-devStatus.textContent=
-"Select at least one OS and architecture.";
+devMessage(
+"Select at least one OS and architecture."
+);
 
 return;
 }
 
 OS.length=0;
-OS.push(...os);
+OS.push(...selectedOS);
 
 ARCHS.length=0;
-ARCHS.push(...archs);
+ARCHS.push(...selectedArchs);
 
-devStatus.textContent=
-"Platform filters applied. Reloading…";
+savePlatforms();
 
-location.reload();
+devMessage(
+"Platform settings applied. Reloading…"
+);
+
+load();
+
 }
 
 renderPlatformOptions();
 
+const applyPlatforms=
 document.getElementById(
 "apply-platforms"
-).addEventListener(
+);
+
+if(applyPlatforms){
+
+applyPlatforms.addEventListener(
 "click",
 applyPlatformOptions
 );
 
+}
+
+const reloadKey=
 document.getElementById(
 "reload-key"
-).addEventListener(
+);
+
+if(reloadKey){
+
+reloadKey.addEventListener(
 "click",
 ()=>{
+
+if(!keyInput){
+
+devMessage(
+"GitHub API key input is unavailable."
+);
+
+return;
+}
 
 const key=
 keyInput.value.trim();
 
 if(!key){
 
-devStatus.textContent=
-"Enter a GitHub API key first.";
+devMessage(
+"Enter a GitHub API key first."
+);
 
 return;
 }
 
 setGitHubKey(key);
 
-devStatus.textContent=
-"Reloading with the entered GitHub API key…";
+devMessage(
+"Reloading with the entered GitHub API key…"
+);
 
 load();
+
 }
 );
 
+}
+
+const storeKey=
 document.getElementById(
 "store-key"
-).addEventListener(
+);
+
+if(storeKey){
+
+storeKey.addEventListener(
 "click",
 ()=>{
+
+if(!keyInput){
+
+devMessage(
+"GitHub API key input is unavailable."
+);
+
+return;
+}
 
 const key=
 keyInput.value.trim();
 
 if(!key){
 
-devStatus.textContent=
-"Enter a GitHub API key first.";
+devMessage(
+"Enter a GitHub API key first."
+);
 
 return;
 }
 
 storeCookieKey(key);
 
-devStatus.textContent=
-"GitHub API key stored in this browser.";
+devMessage(
+"GitHub API key stored in this browser."
+);
+
 }
 );
 
+}
+
+const reloadCookie=
 document.getElementById(
 "reload-cookie"
-).addEventListener(
+);
+
+if(reloadCookie){
+
+reloadCookie.addEventListener(
 "click",
 ()=>{
 
@@ -797,41 +1237,59 @@ getCookieKey();
 
 if(!key){
 
-devStatus.textContent=
-"No stored GitHub API key was found.";
+devMessage(
+"No stored GitHub API key was found."
+);
 
 return;
 }
 
 setGitHubKey(key);
 
+if(keyInput)
 keyInput.value=key;
 
-devStatus.textContent=
-"Reloading with the stored GitHub API key…";
+devMessage(
+"Reloading with the stored GitHub API key…"
+);
 
 load();
+
 }
 );
 
+}
+
+const resetCookieButton=
 document.getElementById(
 "reset-cookie"
-).addEventListener(
+);
+
+if(resetCookieButton){
+
+resetCookieButton.addEventListener(
 "click",
 ()=>{
 
 resetCookie();
 setGitHubKey("");
 
+if(keyInput)
 keyInput.value="";
 
-devStatus.textContent=
-"Stored GitHub API key removed.";
+devMessage(
+"Stored GitHub API key removed."
+);
+
 }
 );
 
+}
+
 const showKey=
 document.getElementById("show-key");
+
+if(showKey&&keyInput){
 
 showKey.addEventListener(
 "mousedown",
@@ -877,16 +1335,27 @@ keyInput.type="password";
 }
 );
 
-document.getElementById(
-"refresh"
-).addEventListener(
+}
+
+const refresh=
+document.getElementById("refresh");
+
+if(refresh){
+
+refresh.addEventListener(
 "click",
 ()=>{
 
 setGitHubKey("");
+
+if(keyInput)
 keyInput.value="";
+
 load();
+
 }
 );
+
+}
 
 load();
