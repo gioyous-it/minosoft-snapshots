@@ -11,11 +11,13 @@ const THROBBER="throbber.gif";
 const OS=[
 ["ubuntu","Linux"],
 ["windows","Windows"],
+["dummytest1","Dummy"],
 ["macos","macOS"]
 ];
 
 const ARCHS=[
 "amd64",
+"dummytest2",
 "aarch64"
 ];
 
