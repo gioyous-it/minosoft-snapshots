@@ -6,6 +6,7 @@ const STATUS="success";
 const PER_PAGE=100;
 const ARTIFACT_PREFIX="minosoft";
 const COOKIE_NAME="minosoft_github_key";
+const THROBBER="throbber.gif";
 
 const OS=[
 ["ubuntu","Linux"],
@@ -21,7 +22,7 @@ const ARCHS=[
 const GH_API=`https://api.github.com/repos/${REPO}`;
 const GH=`https://github.com/${REPO}`;
 const WORKFLOW_URL=`${GH_API}/actions/workflows/${WORKFLOW}/runs`;
-const ARTIFACT_URL=`${GH_API}/actions/runs`;
+const RUNS_URL=`${GH_API}/actions/runs`;
 const RELEASE_URL=`${GH_API}/releases`;
 
 let githubKey="";
@@ -35,17 +36,32 @@ const esc=v=>String(v??"")
 
 const loadingHTML=text=>`
 <div class="loading">
-<img class="throbber" src="throbber.gif" alt="">
+<img class="throbber" src="${THROBBER}" alt="">
 ${text}
 </div>
 `;
 
 const linkHTML=(url,text,extra="")=>`
-<a class="download" href="${esc(url)}"
-target="_blank" rel="noopener">
-${esc(text)}${extra}
+<a
+class="download"
+href="${esc(url)}"
+target="_blank"
+rel="noopener"
+>
+${esc(text)}
+${extra}
 </a>
 `;
+
+const escapeRegex=v=>
+String(v).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+
+const OS_PATTERN=OS.map(x=>escapeRegex(x[0])).join("|");
+const ARCH_PATTERN=ARCHS.map(escapeRegex).join("|");
+
+const ARTIFACT_PATTERN=new RegExp(
+`^${escapeRegex(ARTIFACT_PREFIX)}-(${OS_PATTERN})-(${ARCH_PATTERN})$`
+);
 
 function utc(v){
 return new Date(v).toLocaleString("en-GB",{
@@ -96,7 +112,9 @@ rate limit has been reached.
 }
 
 async function get(url){
-const headers={"Accept":"application/vnd.github+json"};
+const headers={
+"Accept":"application/vnd.github+json"
+};
 
 if(githubKey)
 headers["Authorization"]=`Bearer ${githubKey}`;
@@ -108,9 +126,11 @@ if(!response.ok){
 const e=new Error(
 `HTTP ${response.status} ${response.statusText}`
 );
+
 e.status=response.status;
 e.url=url;
 e.body=body;
+
 throw e;
 }
 
@@ -118,9 +138,11 @@ try{
 return JSON.parse(body);
 }catch{
 const e=new Error("Response was not valid JSON");
+
 e.status=response.status;
 e.url=url;
 e.body=body;
+
 throw e;
 }
 }
@@ -130,8 +152,11 @@ const out=[];
 let page=1;
 
 while(true){
+
+const separator=url.includes("?")?"&":"?";
+
 const data=await get(
-`${url}?per_page=${PER_PAGE}&page=${page}`
+`${url}${separator}per_page=${PER_PAGE}&page=${page}`
 );
 
 const items=key?data[key]:data;
@@ -153,19 +178,29 @@ return out;
 function releaseAsset(release,os,arch){
 return(release.assets||[]).find(asset=>{
 const name=(asset.name||"").toLowerCase();
+
 return name.includes(os)&&name.includes(arch);
 });
 }
 
 function renderRelease(release){
+
 let systems="";
 
 for(const [os,name] of OS){
+
 let buttons="";
 
 for(const arch of ARCHS){
-const asset=releaseAsset(release,os,arch);
-if(!asset)continue;
+
+const asset=releaseAsset(
+release,
+os,
+arch
+);
+
+if(!asset)
+continue;
 
 buttons+=linkHTML(
 asset.browser_download_url||asset.url,
@@ -174,7 +209,9 @@ arch,
 );
 }
 
-if(buttons)
+if(!buttons)
+continue;
+
 systems+=`
 <div class="os">
 <div class="os-title">${esc(name)}</div>
@@ -183,35 +220,56 @@ systems+=`
 `;
 }
 
-if(!systems)
-systems=`<div class="empty">
-No matching platform downloads found.
-</div>`;
+if(!systems){
 
-const name=release.name||release.tag_name||"Release";
-const tag=release.tag_name||"";
-const date=release.published_at||release.created_at;
+systems=`
+<div class="empty">
+No matching platform downloads found.
+</div>
+`;
+}
+
+const name=
+release.name||
+release.tag_name||
+"Release";
+
+const tag=
+release.tag_name||"";
+
+const date=
+release.published_at||
+release.created_at;
 
 return `
 <details class="version">
+
 <summary>
 
 <div class="version-info">
 
 <div class="version-title">
+
 <span>${esc(name)}</span>
 
 ${release.prerelease?`
-<span class="prerelease">Pre-release</span>
+<span class="prerelease">
+Pre-release
+</span>
 `:""}
 
 </div>
 
-<div class="version-message">${esc(tag)}</div>
+<div class="version-message">
+${esc(tag)}
+</div>
 
 </div>
 
-<div class="date">${date?esc(utc(date)):""}</div>
+<div class="date">
+${date?esc(utc(date)):""}
+</div>
+
 <div class="arrow">▼</div>
 
 </summary>
@@ -230,79 +288,96 @@ View release on GitHub →
 </a>
 
 </div>
+
 </details>
 `;
 }
 
 async function loadReleases(){
-const box=document.getElementById("releases");
+
+const box=
+document.getElementById("releases");
 
 try{
-const releases=await getAll(RELEASE_URL);
 
-document.getElementById("release-count").textContent=
-`(${releases.length})`;
+const releases=
+await getAll(RELEASE_URL);
+
+document.getElementById(
+"release-count"
+).textContent=`(${releases.length})`;
 
 if(!releases.length){
+
 box.innerHTML=`
 <div class="empty">
 No releases have been published yet.
-</div>`;
+</div>
+`;
+
 return;
 }
 
-box.innerHTML=releases.map(renderRelease).join("");
+box.innerHTML=
+releases.map(renderRelease).join("");
 
 }catch(e){
+
 box.innerHTML=errorHTML(e);
 }
 }
 
 async function getAllSuccessfulRuns(){
-const runs=await getAll(
-`${WORKFLOW_URL}?branch=${encodeURIComponent(BRANCH)}&event=${encodeURIComponent(EVENT)}&status=${encodeURIComponent(STATUS)}`,
-"workflow_runs"
-);
 
-return runs.filter(run=>
+const url=
+`${WORKFLOW_URL}`+
+`?branch=${encodeURIComponent(BRANCH)}`+
+`&event=${encodeURIComponent(EVENT)}`+
+`&status=${encodeURIComponent(STATUS)}`;
+
+const runs=
+await getAll(url,"workflow_runs");
+
+return runs
+.filter(run=>
 run.event===EVENT&&
 run.head_branch===BRANCH&&
 run.status==="completed"&&
 run.conclusion===STATUS
-).sort((a,b)=>
-new Date(b.created_at)-new Date(a.created_at)
+)
+.sort((a,b)=>
+new Date(b.created_at)-
+new Date(a.created_at)
 );
 }
 
 async function getArtifacts(runId){
+
 const data=await get(
-`${ARTIFACT_URL}/${runId}/artifacts?per_page=${PER_PAGE}`
+`${RUNS_URL}/${runId}/artifacts?per_page=${PER_PAGE}`
 );
+
 return data.artifacts||[];
 }
 
 function makeArtifactMap(artifacts){
+
 const result={};
-
-const escapeRegex=x=>
-x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-
-const osPattern=OS.map(x=>escapeRegex(x[0])).join("|");
-const archPattern=ARCHS.map(escapeRegex).join("|");
-
-const pattern=new RegExp(
-`^${escapeRegex(ARTIFACT_PREFIX)}-(${osPattern})-(${archPattern})$`
-);
 
 for(const artifact of artifacts){
 
 if(artifact.expired)
 continue;
 
-const match=artifact.name.match(pattern);
+const match=
+artifact.name.match(ARTIFACT_PATTERN);
 
-if(match)
-result[`${match[1]}:${match[2]}`]=artifact;
+if(!match)
+continue;
+
+result[
+`${match[1]}:${match[2]}`
+]=artifact;
 }
 
 return result;
@@ -310,7 +385,9 @@ return result;
 
 function renderSnapshot(run,artifacts){
 
-const map=makeArtifactMap(artifacts);
+const map=
+makeArtifactMap(artifacts);
+
 let systems="";
 
 for(const [os,name] of OS){
@@ -319,7 +396,8 @@ let buttons="";
 
 for(const arch of ARCHS){
 
-const artifact=map[`${os}:${arch}`];
+const artifact=
+map[`${os}:${arch}`];
 
 if(!artifact)
 continue;
@@ -330,11 +408,20 @@ arch
 );
 }
 
-if(buttons)
+if(!buttons)
+continue;
+
 systems+=`
 <div class="os">
-<div class="os-title">${esc(name)}</div>
-<div class="buttons">${buttons}</div>
+
+<div class="os-title">
+${esc(name)}
+</div>
+
+<div class="buttons">
+${buttons}
+</div>
+
 </div>
 `;
 }
@@ -344,11 +431,13 @@ return "";
 
 return `
 <details class="version">
+
 <summary>
 
 <div class="version-info">
 
 <div class="version-title">
+
 Minosoft
 
 <span class="version-id">
@@ -373,7 +462,10 @@ run.display_title||
 
 </div>
 
-<div class="date">${esc(utc(run.created_at))}</div>
+<div class="date">
+${esc(utc(run.created_at))}
+</div>
+
 <div class="arrow">▼</div>
 
 </summary>
@@ -392,36 +484,48 @@ View workflow run on GitHub →
 </a>
 
 </div>
+
 </details>
 `;
 }
 
 async function loadSnapshots(){
 
-const box=document.getElementById("snapshots");
+const box=
+document.getElementById("snapshots");
 
 try{
 
-const runs=await getAllSuccessfulRuns();
+const runs=
+await getAllSuccessfulRuns();
 
-const snapshots=await Promise.all(
+const snapshots=
+await Promise.all(
 runs.map(async run=>{
+
 try{
+
 return{
 run,
-artifacts:await getArtifacts(run.id)
+artifacts:
+await getArtifacts(run.id)
 };
+
 }catch(e){
+
 console.warn(
 "Could not load artifacts for run",
 run.id,
 e
 );
+
 return{
 run,
 artifacts:[]
 };
+
 }
+
 })
 );
 
@@ -430,7 +534,8 @@ let count=0;
 
 for(const snapshot of snapshots){
 
-const rendered=renderSnapshot(
+const rendered=
+renderSnapshot(
 snapshot.run,
 snapshot.artifacts
 );
@@ -453,33 +558,42 @@ document.getElementById(
 ).textContent=`(${count})`;
 
 }catch(e){
+
 box.innerHTML=errorHTML(e);
 }
 }
 
 async function load(){
 
-const releases=document.getElementById("releases");
-const snapshots=document.getElementById("snapshots");
+const releases=
+document.getElementById("releases");
+
+const snapshots=
+document.getElementById("snapshots");
 
 document.getElementById("status").textContent=
 githubKey?
 "Fetching versions with GitHub authentication…":
 "Fetching versions…";
 
-releases.innerHTML=loadingHTML("Loading releases…");
-snapshots.innerHTML=loadingHTML("Loading snapshots…");
+releases.innerHTML=
+loadingHTML("Loading releases…");
+
+snapshots.innerHTML=
+loadingHTML("Loading snapshots…");
 
 await Promise.allSettled([
 loadReleases(),
 loadSnapshots()
 ]);
 
-const r=document.getElementById(
+const r=
+document.getElementById(
 "release-count"
 ).textContent||"(0)";
 
-const s=document.getElementById(
+const s=
+document.getElementById(
 "snapshot-count"
 ).textContent||"(0)";
 
@@ -493,7 +607,8 @@ githubKey=String(key||"").trim();
 
 function getCookieKey(){
 
-const prefix=COOKIE_NAME+"=";
+const prefix=
+COOKIE_NAME+"=";
 
 for(const part of document.cookie.split(";")){
 
@@ -503,10 +618,13 @@ if(!item.startsWith(prefix))
 continue;
 
 try{
+
 return decodeURIComponent(
 item.substring(prefix.length)
 );
+
 }catch{
+
 return "";
 }
 }
@@ -544,11 +662,14 @@ document.getElementById(
 "click",
 ()=>{
 
-const key=keyInput.value.trim();
+const key=
+keyInput.value.trim();
 
 if(!key){
+
 devStatus.textContent=
 "Enter a GitHub API key first.";
+
 return;
 }
 
@@ -567,11 +688,14 @@ document.getElementById(
 "click",
 ()=>{
 
-const key=keyInput.value.trim();
+const key=
+keyInput.value.trim();
 
 if(!key){
+
 devStatus.textContent=
 "Enter a GitHub API key first.";
+
 return;
 }
 
@@ -588,15 +712,19 @@ document.getElementById(
 "click",
 ()=>{
 
-const key=getCookieKey();
+const key=
+getCookieKey();
 
 if(!key){
+
 devStatus.textContent=
 "No stored GitHub API key was found.";
+
 return;
 }
 
 setGitHubKey(key);
+
 keyInput.value=key;
 
 devStatus.textContent=
@@ -614,6 +742,7 @@ document.getElementById(
 
 resetCookie();
 setGitHubKey("");
+
 keyInput.value="";
 
 devStatus.textContent=
@@ -673,6 +802,7 @@ document.getElementById(
 ).addEventListener(
 "click",
 ()=>{
+
 setGitHubKey("");
 keyInput.value="";
 load();
