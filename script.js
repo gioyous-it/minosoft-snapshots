@@ -1,17 +1,10 @@
 const REPO="Bixilon/Minosoft";
-
-const GH_API=`https://api.github.com/repos/${REPO}`;
-const GH="https://github.com/Bixilon/Minosoft";
-
-const WORKFLOW_URL=
-`${GH_API}/actions/workflows/build.yml/runs`;
-
-const ARTIFACT_URL=
-`${GH_API}/actions/runs`;
-
-const RELEASE_URL=
-`${GH_API}/releases`;
-
+const BRANCH="master";
+const WORKFLOW="build.yml";
+const EVENT="push";
+const STATUS="success";
+const PER_PAGE=100;
+const ARTIFACT_PREFIX="minosoft";
 const COOKIE_NAME="minosoft_github_key";
 
 const OS=[
@@ -20,21 +13,39 @@ const OS=[
 ["macos","macOS"]
 ];
 
-const ARCH=[
+const ARCHS=[
 "amd64",
 "aarch64"
 ];
 
+const GH_API=`https://api.github.com/repos/${REPO}`;
+const GH=`https://github.com/${REPO}`;
+const WORKFLOW_URL=`${GH_API}/actions/workflows/${WORKFLOW}/runs`;
+const ARTIFACT_URL=`${GH_API}/actions/runs`;
+const RELEASE_URL=`${GH_API}/releases`;
+
 let githubKey="";
 
-function esc(v){
-return String(v??"")
+const esc=v=>String(v??"")
 .replaceAll("&","&amp;")
 .replaceAll("<","&lt;")
 .replaceAll(">","&gt;")
 .replaceAll('"',"&quot;")
 .replaceAll("'","&#039;");
-}
+
+const loadingHTML=text=>`
+<div class="loading">
+<img class="throbber" src="throbber.gif" alt="">
+${text}
+</div>
+`;
+
+const linkHTML=(url,text,extra="")=>`
+<a class="download" href="${esc(url)}"
+target="_blank" rel="noopener">
+${esc(text)}${extra}
+</a>
+`;
 
 function utc(v){
 return new Date(v).toLocaleString("en-GB",{
@@ -49,7 +60,6 @@ hour12:false
 }
 
 function errorHTML(e){
-
 const status=e.status??"Unknown";
 const url=e.url??"Unknown";
 const body=e.body??"";
@@ -86,131 +96,85 @@ rate limit has been reached.
 }
 
 async function get(url){
+const headers={"Accept":"application/vnd.github+json"};
 
-const headers={
-"Accept":"application/vnd.github+json"
-};
-
-if(githubKey){
+if(githubKey)
 headers["Authorization"]=`Bearer ${githubKey}`;
-}
 
 const response=await fetch(url,{headers});
 const body=await response.text();
 
 if(!response.ok){
-
 const e=new Error(
 `HTTP ${response.status} ${response.statusText}`
 );
-
 e.status=response.status;
 e.url=url;
 e.body=body;
-
 throw e;
 }
 
 try{
 return JSON.parse(body);
 }catch{
-
 const e=new Error("Response was not valid JSON");
-
 e.status=response.status;
 e.url=url;
 e.body=body;
-
 throw e;
 }
 }
 
-async function getAllReleases(){
-
-const releases=[];
+async function getAll(url,key){
+const out=[];
 let page=1;
 
 while(true){
-
 const data=await get(
-`${RELEASE_URL}?per_page=100&page=${page}`
+`${url}?per_page=${PER_PAGE}&page=${page}`
 );
 
-if(!Array.isArray(data)||!data.length){
-break;
-}
+const items=key?data[key]:data;
 
-releases.push(...data);
-
-if(data.length<100){
+if(!Array.isArray(items)||!items.length)
 break;
-}
+
+out.push(...items);
+
+if(items.length<PER_PAGE)
+break;
 
 page++;
 }
 
-return releases;
-}
-
-function releaseIsPrerelease(release){
-return release.prerelease===true;
+return out;
 }
 
 function releaseAsset(release,os,arch){
-
-const assets=release.assets||[];
-
-return assets.find(asset=>{
-
+return(release.assets||[]).find(asset=>{
 const name=(asset.name||"").toLowerCase();
-
 return name.includes(os)&&name.includes(arch);
-
 });
 }
 
 function renderRelease(release){
-
 let systems="";
 
-for(const [key,name] of OS){
-
+for(const [os,name] of OS){
 let buttons="";
 
-for(const arch of ARCH){
+for(const arch of ARCHS){
+const asset=releaseAsset(release,os,arch);
+if(!asset)continue;
 
-const asset=releaseAsset(
-release,
-key,
-arch
+buttons+=linkHTML(
+asset.browser_download_url||asset.url,
+arch,
+`<span class="asset-name">${esc(asset.name)}</span>`
 );
-
-if(!asset){
-continue;
 }
 
-buttons+=`
-<a
-class="download"
-href="${esc(
-asset.browser_download_url||
-asset.url
-)}"
-target="_blank"
-rel="noopener"
->
-${esc(arch)}
-<span class="asset-name">
-${esc(asset.name)}
-</span>
-</a>
-`;
-}
-
-if(!buttons){
-continue;
-}
-
+if(buttons)
 systems+=`
 <div class="os">
 <div class="os-title">${esc(name)}</div>
@@ -219,30 +183,17 @@ systems+=`
 `;
 }
 
-if(!systems){
-
-systems=`
-<div class="empty">
+if(!systems)
+systems=`<div class="empty">
 No matching platform downloads found.
-</div>
-`;
-}
+</div>`;
 
-const name=
-release.name||
-release.tag_name||
-"Release";
-
-const tag=
-release.tag_name||"";
-
-const date=
-release.published_at||
-release.created_at;
+const name=release.name||release.tag_name||"Release";
+const tag=release.tag_name||"";
+const date=release.published_at||release.created_at;
 
 return `
 <details class="version">
-
 <summary>
 
 <div class="version-info">
@@ -250,24 +201,17 @@ return `
 <div class="version-title">
 <span>${esc(name)}</span>
 
-${releaseIsPrerelease(release)?`
-<span class="prerelease">
-Pre-release
-</span>
+${release.prerelease?`
+<span class="prerelease">Pre-release</span>
 `:""}
 
 </div>
 
-<div class="version-message">
-${esc(tag)}
-</div>
+<div class="version-message">${esc(tag)}</div>
 
 </div>
 
-<div class="date">
-${date?esc(utc(date)):""}
-</div>
-
+<div class="date">${date?esc(utc(date)):""}</div>
 <div class="arrow">▼</div>
 
 </summary>
@@ -286,125 +230,79 @@ View release on GitHub →
 </a>
 
 </div>
-
 </details>
 `;
 }
 
 async function loadReleases(){
-
 const box=document.getElementById("releases");
 
 try{
+const releases=await getAll(RELEASE_URL);
 
-const releases=await getAllReleases();
-
-document.getElementById(
-"release-count"
-).textContent=`(${releases.length})`;
+document.getElementById("release-count").textContent=
+`(${releases.length})`;
 
 if(!releases.length){
-
 box.innerHTML=`
 <div class="empty">
 No releases have been published yet.
-</div>
-`;
-
+</div>`;
 return;
 }
 
-box.innerHTML=
-releases.map(renderRelease).join("");
+box.innerHTML=releases.map(renderRelease).join("");
 
 }catch(e){
-
 box.innerHTML=errorHTML(e);
 }
 }
 
 async function getAllSuccessfulRuns(){
-
-const runs=[];
-let page=1;
-
-while(true){
-
-const url=
-WORKFLOW_URL+
-`?branch=master`+
-`&event=push`+
-`&status=success`+
-`&per_page=100`+
-`&page=${page}`;
-
-const data=await get(url);
-
-if(
-!data.workflow_runs||
-data.workflow_runs.length===0
-){
-break;
-}
-
-for(const run of data.workflow_runs){
-
-if(
-run.event==="push"&&
-run.head_branch==="master"&&
-run.status==="completed"&&
-run.conclusion==="success"
-){
-runs.push(run);
-}
-}
-
-if(data.workflow_runs.length<100){
-break;
-}
-
-page++;
-}
-
-runs.sort(
-(a,b)=>
-new Date(b.created_at)-
-new Date(a.created_at)
+const runs=await getAll(
+`${WORKFLOW_URL}?branch=${encodeURIComponent(BRANCH)}&event=${encodeURIComponent(EVENT)}&status=${encodeURIComponent(STATUS)}`,
+"workflow_runs"
 );
 
-return runs;
+return runs.filter(run=>
+run.event===EVENT&&
+run.head_branch===BRANCH&&
+run.status==="completed"&&
+run.conclusion===STATUS
+).sort((a,b)=>
+new Date(b.created_at)-new Date(a.created_at)
+);
 }
 
 async function getArtifacts(runId){
-
 const data=await get(
-`${ARTIFACT_URL}/${runId}/artifacts?per_page=100`
+`${ARTIFACT_URL}/${runId}/artifacts?per_page=${PER_PAGE}`
 );
-
 return data.artifacts||[];
 }
 
 function makeArtifactMap(artifacts){
-
 const result={};
+
+const escapeRegex=x=>
+x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+
+const osPattern=OS.map(x=>escapeRegex(x[0])).join("|");
+const archPattern=ARCHS.map(escapeRegex).join("|");
+
+const pattern=new RegExp(
+`^${escapeRegex(ARTIFACT_PREFIX)}-(${osPattern})-(${archPattern})$`
+);
 
 for(const artifact of artifacts){
 
-if(artifact.expired){
+if(artifact.expired)
 continue;
-}
 
-const match=artifact.name.match(
-/^minosoft-(ubuntu|windows|macos)-(amd64|aarch64)$/
-);
+const match=artifact.name.match(pattern);
 
-if(!match){
-continue;
-}
-
-result[
-`${match[1]}:${match[2]}`
-]=artifact;
+if(match)
+result[`${match[1]}:${match[2]}`]=artifact;
 }
 
 return result;
@@ -413,65 +311,39 @@ return result;
 function renderSnapshot(run,artifacts){
 
 const map=makeArtifactMap(artifacts);
+let systems="";
 
-let operatingSystems="";
-
-for(const os of OS){
+for(const [os,name] of OS){
 
 let buttons="";
 
-for(const arch of ARCH){
+for(const arch of ARCHS){
 
-const artifact=
-map[`${os[0]}:${arch}`];
+const artifact=map[`${os}:${arch}`];
 
-if(!artifact){
+if(!artifact)
 continue;
+
+buttons+=linkHTML(
+`${GH}/actions/runs/${run.id}/artifacts/${artifact.id}`,
+arch
+);
 }
 
-const url=
-`${GH}/actions/runs/`+
-`${run.id}/artifacts/`+
-`${artifact.id}`;
-
-buttons+=`
-<a
-class="download"
-href="${esc(url)}"
-target="_blank"
-rel="noopener"
->
-${esc(arch)}
-</a>
-`;
-}
-
-if(!buttons){
-continue;
-}
-
-operatingSystems+=`
+if(buttons)
+systems+=`
 <div class="os">
-
-<div class="os-title">
-${esc(os[1])}
-</div>
-
-<div class="buttons">
-${buttons}
-</div>
-
+<div class="os-title">${esc(name)}</div>
+<div class="buttons">${buttons}</div>
 </div>
 `;
 }
 
-if(!operatingSystems){
+if(!systems)
 return "";
-}
 
 return `
 <details class="version">
-
 <summary>
 
 <div class="version-info">
@@ -501,17 +373,14 @@ run.display_title||
 
 </div>
 
-<div class="date">
-${esc(utc(run.created_at))}
-</div>
-
+<div class="date">${esc(utc(run.created_at))}</div>
 <div class="arrow">▼</div>
 
 </summary>
 
 <div class="downloads">
 
-${operatingSystems}
+${systems}
 
 <a
 class="release-link"
@@ -523,7 +392,6 @@ View workflow run on GitHub →
 </a>
 
 </div>
-
 </details>
 `;
 }
@@ -538,28 +406,22 @@ const runs=await getAllSuccessfulRuns();
 
 const snapshots=await Promise.all(
 runs.map(async run=>{
-
 try{
-
 return{
 run,
 artifacts:await getArtifacts(run.id)
 };
-
 }catch(e){
-
 console.warn(
 "Could not load artifacts for run",
 run.id,
 e
 );
-
 return{
 run,
 artifacts:[]
 };
 }
-
 })
 );
 
@@ -573,72 +435,53 @@ snapshot.run,
 snapshot.artifacts
 );
 
-if(!rendered){
+if(!rendered)
 continue;
-}
 
 html+=rendered;
 count++;
 }
 
-if(!html){
-
-box.innerHTML=`
+box.innerHTML=html||`
 <div class="empty">
 No downloadable snapshots found.
 </div>
 `;
-
-}else{
-
-box.innerHTML=html;
-}
 
 document.getElementById(
 "snapshot-count"
 ).textContent=`(${count})`;
 
 }catch(e){
-
 box.innerHTML=errorHTML(e);
 }
 }
 
 async function load(){
 
+const releases=document.getElementById("releases");
+const snapshots=document.getElementById("snapshots");
+
 document.getElementById("status").textContent=
 githubKey?
 "Fetching versions with GitHub authentication…":
 "Fetching versions…";
 
-document.getElementById("releases").innerHTML=`
-<div class="loading">
-<img class="throbber" src="throbber.gif" alt="">
-Loading releases…
-</div>
-`;
-
-document.getElementById("snapshots").innerHTML=`
-<div class="loading">
-<img class="throbber" src="throbber.gif" alt="">
-Loading snapshots…
-</div>
-`;
+releases.innerHTML=loadingHTML("Loading releases…");
+snapshots.innerHTML=loadingHTML("Loading snapshots…");
 
 await Promise.allSettled([
 loadReleases(),
 loadSnapshots()
 ]);
 
-const r=
-document.getElementById("release-count")
-.textContent||
-"(0)";
+const r=document.getElementById(
+"release-count"
+).textContent||"(0)";
 
-const s=
-document.getElementById("snapshot-count")
-.textContent||
-"(0)";
+const s=document.getElementById(
+"snapshot-count"
+).textContent||"(0)";
 
 document.getElementById("status").textContent=
 `${r.slice(1,-1)} releases · ${s.slice(1,-1)} snapshots`;
@@ -656,9 +499,8 @@ for(const part of document.cookie.split(";")){
 
 const item=part.trim();
 
-if(!item.startsWith(prefix)){
+if(!item.startsWith(prefix))
 continue;
-}
 
 try{
 return decodeURIComponent(
@@ -674,9 +516,8 @@ return "";
 
 function storeCookieKey(key){
 
-if(!key){
+if(!key)
 return;
-}
 
 document.cookie=
 `${COOKIE_NAME}=`+
@@ -706,10 +547,8 @@ document.getElementById(
 const key=keyInput.value.trim();
 
 if(!key){
-
 devStatus.textContent=
 "Enter a GitHub API key first.";
-
 return;
 }
 
@@ -731,10 +570,8 @@ document.getElementById(
 const key=keyInput.value.trim();
 
 if(!key){
-
 devStatus.textContent=
 "Enter a GitHub API key first.";
-
 return;
 }
 
@@ -742,7 +579,6 @@ storeCookieKey(key);
 
 devStatus.textContent=
 "GitHub API key stored in this browser.";
-
 }
 );
 
@@ -755,22 +591,18 @@ document.getElementById(
 const key=getCookieKey();
 
 if(!key){
-
 devStatus.textContent=
 "No stored GitHub API key was found.";
-
 return;
 }
 
 setGitHubKey(key);
-
 keyInput.value=key;
 
 devStatus.textContent=
 "Reloading with the stored GitHub API key…";
 
 load();
-
 }
 );
 
@@ -781,14 +613,11 @@ document.getElementById(
 ()=>{
 
 resetCookie();
-
 setGitHubKey("");
-
 keyInput.value="";
 
 devStatus.textContent=
 "Stored GitHub API key removed.";
-
 }
 );
 
@@ -844,13 +673,9 @@ document.getElementById(
 ).addEventListener(
 "click",
 ()=>{
-
 setGitHubKey("");
-
 keyInput.value="";
-
 load();
-
 }
 );
 
