@@ -658,6 +658,84 @@ document.getElementById("github-key");
 const devStatus=
 document.getElementById("dev-status");
 
+function renderPlatformOptions(){
+
+const osBox=document.getElementById("dev-os");
+const archBox=document.getElementById("dev-arch");
+
+osBox.innerHTML=OS.map(([id,name])=>`
+<label>
+<input
+type="checkbox"
+name="dev-os"
+value="${esc(id)}"
+checked
+>
+${esc(name)}
+</label>
+`).join("");
+
+archBox.innerHTML=ARCHS.map(arch=>`
+<label>
+<input
+type="checkbox"
+name="dev-arch"
+value="${esc(arch)}"
+checked
+>
+${esc(arch)}
+</label>
+`).join("");
+}
+
+function applyPlatformOptions(){
+
+const os=[
+...document.querySelectorAll(
+'input[name="dev-os"]:checked'
+)
+].map(x=>{
+
+const found=OS.find(o=>o[0]===x.value);
+
+return found;
+}).filter(Boolean);
+
+const archs=[
+...document.querySelectorAll(
+'input[name="dev-arch"]:checked'
+)
+].map(x=>x.value);
+
+if(!os.length||!archs.length){
+
+devStatus.textContent=
+"Select at least one OS and architecture.";
+
+return;
+}
+
+OS.length=0;
+OS.push(...os);
+
+ARCHS.length=0;
+ARCHS.push(...archs);
+
+devStatus.textContent=
+"Platform filters applied. Reloading…";
+
+location.reload();
+}
+
+renderPlatformOptions();
+
+document.getElementById(
+"apply-platforms"
+).addEventListener(
+"click",
+applyPlatformOptions
+);
+
 document.getElementById(
 "reload-key"
 ).addEventListener(
