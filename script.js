@@ -6,24 +6,20 @@ const STATUS="success";
 const PER_PAGE=100;
 const ARTIFACT_PREFIX="minosoft";
 const COOKIE_NAME="minosoft_github_key";
-const PLATFORM_STORAGE="minosoft_platforms";
 const THROBBER="throbber.gif";
 
-const DEFAULT_OS=[
+const OS=[
 ["ubuntu","Linux"],
 ["windows","Windows"],
 ["dummytest1","Dummy"],
 ["macos","macOS"]
 ];
 
-const DEFAULT_ARCHS=[
+const ARCHS=[
 "amd64",
 "dummytest2",
 "aarch64"
 ];
-
-const OS=[];
-const ARCHS=[];
 
 const GH_API=`https://api.github.com/repos/${REPO}`;
 const GH=`https://github.com/${REPO}`;
@@ -62,87 +58,14 @@ ${extra}
 const escapeRegex=v=>
 String(v).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
 
-function loadPlatforms(){
+const OS_PATTERN=OS.map(x=>escapeRegex(x[0])).join("|");
+const ARCH_PATTERN=ARCHS.map(escapeRegex).join("|");
 
-let saved;
-
-try{
-saved=JSON.parse(
-localStorage.getItem(PLATFORM_STORAGE)
+const ARTIFACT_PATTERN=new RegExp(
+`^${escapeRegex(ARTIFACT_PREFIX)}-(${OS_PATTERN})-(${ARCH_PATTERN})$`
 );
-}catch{
-saved=null;
-}
-
-OS.length=0;
-ARCHS.length=0;
-
-if(
-saved&&
-Array.isArray(saved.os)&&
-Array.isArray(saved.archs)&&
-saved.os.length&&
-saved.archs.length
-){
-
-for(const item of saved.os){
-
-if(
-Array.isArray(item)&&
-item.length>=2&&
-String(item[0]).trim()&&
-String(item[1]).trim()
-){
-OS.push([
-String(item[0]).trim(),
-String(item[1]).trim()
-]);
-}
-}
-
-for(const arch of saved.archs){
-
-if(String(arch).trim())
-ARCHS.push(String(arch).trim());
-}
-
-}
-
-if(!OS.length)
-OS.push(...DEFAULT_OS);
-
-if(!ARCHS.length)
-ARCHS.push(...DEFAULT_ARCHS);
-}
-
-function savePlatforms(){
-
-localStorage.setItem(
-PLATFORM_STORAGE,
-JSON.stringify({
-os:OS,
-archs:ARCHS
-})
-);
-}
-
-loadPlatforms();
-
-function artifactPattern(){
-
-const osPattern=
-OS.map(x=>escapeRegex(x[0])).join("|");
-
-const archPattern=
-ARCHS.map(escapeRegex).join("|");
-
-return new RegExp(
-`^${escapeRegex(ARTIFACT_PREFIX)}-(${osPattern})-(${archPattern})$`
-);
-}
 
 function utc(v){
-
 return new Date(v).toLocaleString("en-GB",{
 timeZone:"UTC",
 year:"numeric",
@@ -155,7 +78,6 @@ hour12:false
 }
 
 function errorHTML(e){
-
 const status=e.status??"Unknown";
 const url=e.url??"Unknown";
 const body=e.body??"";
@@ -192,7 +114,6 @@ rate limit has been reached.
 }
 
 async function get(url){
-
 const headers={
 "Accept":"application/vnd.github+json"
 };
@@ -200,14 +121,10 @@ const headers={
 if(githubKey)
 headers["Authorization"]=`Bearer ${githubKey}`;
 
-const response=
-await fetch(url,{headers});
-
-const body=
-await response.text();
+const response=await fetch(url,{headers});
+const body=await response.text();
 
 if(!response.ok){
-
 const e=new Error(
 `HTTP ${response.status} ${response.statusText}`
 );
@@ -220,13 +137,9 @@ throw e;
 }
 
 try{
-
 return JSON.parse(body);
-
 }catch{
-
-const e=
-new Error("Response was not valid JSON");
+const e=new Error("Response was not valid JSON");
 
 e.status=response.status;
 e.url=url;
@@ -237,27 +150,20 @@ throw e;
 }
 
 async function getAll(url,key){
-
 const out=[];
 let page=1;
 
 while(true){
 
-const separator=
-url.includes("?")?"&":"?";
+const separator=url.includes("?")?"&":"?";
 
-const data=
-await get(
+const data=await get(
 `${url}${separator}per_page=${PER_PAGE}&page=${page}`
 );
 
-const items=
-key?data[key]:data;
+const items=key?data[key]:data;
 
-if(
-!Array.isArray(items)||
-!items.length
-)
+if(!Array.isArray(items)||!items.length)
 break;
 
 out.push(...items);
@@ -272,17 +178,10 @@ return out;
 }
 
 function releaseAsset(release,os,arch){
-
 return(release.assets||[]).find(asset=>{
+const name=(asset.name||"").toLowerCase();
 
-const name=
-(asset.name||"").toLowerCase();
-
-return(
-name.includes(os.toLowerCase())&&
-name.includes(arch.toLowerCase())
-);
-
+return name.includes(os)&&name.includes(arch);
 });
 }
 
@@ -296,8 +195,7 @@ let buttons="";
 
 for(const arch of ARCHS){
 
-const asset=
-releaseAsset(
+const asset=releaseAsset(
 release,
 os,
 arch
@@ -307,8 +205,7 @@ if(!asset)
 continue;
 
 buttons+=linkHTML(
-asset.browser_download_url||
-asset.url,
+asset.browser_download_url||asset.url,
 arch,
 `<span class="asset-name">${esc(asset.name)}</span>`
 );
@@ -333,12 +230,6 @@ No matching platform downloads found.
 </div>
 `;
 }
-
-systems+=`
-<small class="tip">
-Tip: Want to run Minosoft on Android? Download the <b>Linux AARCH64</b> version, extract the ZIP, then open the <b>.jar</b> file with a Java emulator (NOT J2ME!) using its <b>“Open as Swing App”</b> option.
-</small>
-`;
 
 const name=
 release.name||
@@ -416,8 +307,7 @@ await getAll(RELEASE_URL);
 
 document.getElementById(
 "release-count"
-).textContent=
-`(${releases.length})`;
+).textContent=`(${releases.length})`;
 
 if(!releases.length){
 
@@ -435,8 +325,7 @@ releases.map(renderRelease).join("");
 
 }catch(e){
 
-box.innerHTML=
-errorHTML(e);
+box.innerHTML=errorHTML(e);
 }
 }
 
@@ -466,8 +355,7 @@ new Date(a.created_at)
 
 async function getArtifacts(runId){
 
-const data=
-await get(
+const data=await get(
 `${RUNS_URL}/${runId}/artifacts?per_page=${PER_PAGE}`
 );
 
@@ -477,7 +365,6 @@ return data.artifacts||[];
 function makeArtifactMap(artifacts){
 
 const result={};
-const pattern=artifactPattern();
 
 for(const artifact of artifacts){
 
@@ -485,7 +372,7 @@ if(artifact.expired)
 continue;
 
 const match=
-artifact.name.match(pattern);
+artifact.name.match(ARTIFACT_PATTERN);
 
 if(!match)
 continue;
@@ -662,8 +549,7 @@ html+=rendered;
 count++;
 }
 
-box.innerHTML=
-html||`
+box.innerHTML=html||`
 <div class="empty">
 No downloadable snapshots found.
 </div>
@@ -671,13 +557,11 @@ No downloadable snapshots found.
 
 document.getElementById(
 "snapshot-count"
-).textContent=
-`(${count})`;
+).textContent=`(${count})`;
 
 }catch(e){
 
-box.innerHTML=
-errorHTML(e);
+box.innerHTML=errorHTML(e);
 }
 }
 
@@ -720,9 +604,7 @@ document.getElementById("status").textContent=
 }
 
 function setGitHubKey(key){
-
-githubKey=
-String(key||"").trim();
+githubKey=String(key||"").trim();
 }
 
 function getCookieKey(){
@@ -778,15 +660,10 @@ document.getElementById("dev-status");
 
 function renderPlatformOptions(){
 
-const osBox=
-document.getElementById("dev-os");
+const osBox=document.getElementById("dev-os");
+const archBox=document.getElementById("dev-arch");
 
-const archBox=
-document.getElementById("dev-arch");
-
-osBox.innerHTML=`
-<div class="platform-list">
-${OS.map(([id,name],i)=>`
+osBox.innerHTML=OS.map(([id,name])=>`
 <label>
 <input
 type="checkbox"
@@ -795,21 +672,10 @@ value="${esc(id)}"
 checked
 >
 ${esc(name)}
-<code>${esc(id)}</code>
 </label>
-`).join("")}
-</div>
+`).join("");
 
-<div class="platform-add">
-<button type="button" id="add-os">
-Add OS
-</button>
-</div>
-`;
-
-archBox.innerHTML=`
-<div class="platform-list">
-${ARCHS.map(arch=>`
+archBox.innerHTML=ARCHS.map(arch=>`
 <label>
 <input
 type="checkbox"
@@ -819,140 +685,29 @@ checked
 >
 ${esc(arch)}
 </label>
-`).join("")}
-</div>
-
-<div class="platform-add">
-<button type="button" id="add-arch">
-Add architecture
-</button>
-</div>
-`;
-
-document.getElementById(
-"add-os"
-).addEventListener(
-"click",
-()=>{
-
-const id=
-prompt(
-"OS identifier used in artifact names:"
-);
-
-if(!id)
-return;
-
-const cleanId=
-id.trim().toLowerCase();
-
-if(!/^[a-z0-9_-]+$/.test(cleanId)){
-
-devStatus.textContent=
-"Invalid OS identifier.";
-
-return;
-}
-
-if(OS.some(x=>x[0]===cleanId)){
-
-devStatus.textContent=
-"That OS already exists.";
-
-return;
-}
-
-const name=
-prompt(
-"Display name for this OS:",
-cleanId
-);
-
-if(!name||!name.trim())
-return;
-
-OS.push([
-cleanId,
-name.trim()
-]);
-
-savePlatforms();
-renderPlatformOptions();
-
-devStatus.textContent=
-`Added OS: ${name.trim()}`;
-}
-);
-
-document.getElementById(
-"add-arch"
-).addEventListener(
-"click",
-()=>{
-
-const value=
-prompt(
-"Architecture identifier:"
-);
-
-if(!value)
-return;
-
-const arch=
-value.trim().toLowerCase();
-
-if(!/^[a-z0-9_-]+$/.test(arch)){
-
-devStatus.textContent=
-"Invalid architecture identifier.";
-
-return;
-}
-
-if(ARCHS.includes(arch)){
-
-devStatus.textContent=
-"That architecture already exists.";
-
-return;
-}
-
-ARCHS.push(arch);
-
-savePlatforms();
-renderPlatformOptions();
-
-devStatus.textContent=
-`Added architecture: ${arch}`;
-}
-);
+`).join("");
 }
 
 function applyPlatformOptions(){
 
-const selectedOS=[
+const os=[
 ...document.querySelectorAll(
 'input[name="dev-os"]:checked'
 )
-]
-.map(input=>
-OS.find(
-os=>os[0]===input.value
-)
-)
-.filter(Boolean);
+].map(x=>{
 
-const selectedArchs=[
+const found=OS.find(o=>o[0]===x.value);
+
+return found;
+}).filter(Boolean);
+
+const archs=[
 ...document.querySelectorAll(
 'input[name="dev-arch"]:checked'
 )
-]
-.map(input=>input.value);
+].map(x=>x.value);
 
-if(
-!selectedOS.length||
-!selectedArchs.length
-){
+if(!os.length||!archs.length){
 
 devStatus.textContent=
 "Select at least one OS and architecture.";
@@ -961,17 +716,15 @@ return;
 }
 
 OS.length=0;
-OS.push(...selectedOS);
+OS.push(...os);
 
 ARCHS.length=0;
-ARCHS.push(...selectedArchs);
-
-savePlatforms();
+ARCHS.push(...archs);
 
 devStatus.textContent=
-"Platform settings applied. Reloading…";
+"Platform filters applied. Reloading…";
 
-load();
+location.reload();
 }
 
 renderPlatformOptions();
@@ -1068,7 +821,6 @@ document.getElementById(
 ()=>{
 
 resetCookie();
-
 setGitHubKey("");
 
 keyInput.value="";
@@ -1132,9 +884,7 @@ document.getElementById(
 ()=>{
 
 setGitHubKey("");
-
 keyInput.value="";
-
 load();
 }
 );
