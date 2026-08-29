@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Minosoft Download</title>
+<link rel="icon" type="image/png" href="minosoft.png">
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<noscript>
+<div class="container">
+<div class="noscript-warning">
+⚠️ Enable JavaScript to fetch versions.
+</div>
+</div>
+</noscript>
+
+<div class="container">
+
+<div class="header">
+<img class="logo" src="minosoft.png" alt="Minosoft">
+<h1>Minosoft</h1>
+</div>
+
+<div class="subtitle">
+Releases &amp; snapshots
+</div>
+
+<div class="topbar">
+<div id="status">Loading versions…</div>
+
+<button
+id="refresh"
+class="refresh"
+type="button"
+>
+↻ Refresh
+</button>
+</div>
+
+<section class="section">
+
+<div class="section-header">
+<h2>Releases</h2>
+<span id="release-count" class="section-count"></span>
+</div>
+
+<div class="release-warning">
+⚠️ <b>Release support notice.</b>
+This version of the site was created before Minosoft had Releases or Pre-releases.
+Release information may not be displayed correctly until the project's release system
+is established.
+</div>
+
+<div id="releases">
+
+<div class="loading">
+<img class="throbber" src="throbber.gif" alt="">
+Loading releases…
+</div>
+
+</div>
+
+</section>
+
+<section class="section">
+
+<div class="section-header">
+<h2>Snapshots</h2>
+<span id="snapshot-count" class="section-count"></span>
+</div>
+
+<div id="snapshots">
+
+<div class="loading">
+<img class="throbber" src="throbber.gif" alt="">
+Loading snapshots…
+</div>
+
+</div>
+
+<div class="snapshot-warning">
+⚠️ <b>Snapshots expire.</b>
+GitHub Actions artifacts are only available for their configured retention period,
+so this website can only load snapshots whose artifacts are still available.
+<a
+href="https://docs.github.com/en/actions/how-tos/manage-workflow-runs/remove-workflow-artifacts"
+target="_blank"
+rel="noopener"
+>
+Learn about GitHub Actions artifact expiration
+</a>.
+</div>
+
+</section>
+
+<details class="dev">
+
+<summary>
+⚙ Developer Options
+</summary>
+
+<div class="dev-content">
+
+<div class="dev-title">
+GitHub API Key
+</div>
+
+<div class="dev-note">
+Optional. Without a key, GitHub's unauthenticated rate limit applies.
+The key is used only by this page when requesting GitHub data.
+</div>
+
+<div class="dev-warning">
+<b>🔐 Security recommendation:</b>
+For this website, use a
+<b>fine-grained personal access token</b>
+with access limited to public repositories.
+The token should only have the minimum read access required.
+Do not use a classic token with unnecessary write or administration permissions.
+Never share your token with anyone.
+</div>
+
+<div class="key-row">
+
+<div class="key-wrap">
+
+<input
+id="github-key"
+type="password"
+autocomplete="off"
+spellcheck="false"
+placeholder="GitHub fine-grained token"
+>
+
+<button
+id="show-key"
+class="show-key"
+type="button"
+title="Hold to reveal"
+>
+👁
+</button>
+
+</div>
+
+<button
+id="reload-key"
+class="dev-button"
+type="button"
+>
+Reload with API Key
+</button>
+
+<button
+id="store-key"
+class="dev-button"
+type="button"
+>
+Store in Cookies
+</button>
+
+<button
+id="reload-cookie"
+class="dev-button"
+type="button"
+>
+Reload with Cookies
+</button>
+
+<button
+id="reset-cookie"
+class="dev-button"
+type="button"
+>
+Reset Cookie
+</button>
+
+</div>
+
+<div
+id="dev-status"
+class="dev-status"
+></div>
+
+</div>
+
+</details>
+
+<div class="footer">
+
+Minosoft Downloads ·
+
+<a
+href="https://gitlab.bixilon.de/bixilon/minosoft"
+target="_blank"
+rel="noopener"
+>
+Minosoft Repository
+</a>
+·
+
+<a
+href="https://gitlab.com/Bixilon/minosoft"
+target="_blank"
+rel="noopener"
+>
+GitLab Mirror
+</a>
+·
+
+<a
+href="https://github.com/Bixilon/Minosoft"
+target="_blank"
+rel="noopener"
+>
+GitHub Mirror
+</a>
+
+</div>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
