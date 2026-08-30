@@ -355,12 +355,6 @@ No matching platform downloads found.
 
 }
 
-systems+=`
-<small class="tip">
-Tip: Want to run Minosoft on Android? Download the <b>Linux AARCH64</b> version, extract the ZIP, then open the <b>.jar</b> file with a Java emulator (NOT J2ME!) using its <b>“Open as Swing App”</b> option.
-</small>
-`;
-
 const name=
 release.name||
 release.tag_name||
@@ -409,6 +403,10 @@ ${date?esc(utc(date)):""}
 <div class="downloads">
 
 ${systems}
+
+<small class="tip">
+Tip: Want to run Minosoft on Android? Download the <b>Linux AARCH64</b> version, extract the ZIP, then open the <b>.jar</b> file with a Java emulator (NOT J2ME!) using its <b>“Open as Swing App”</b> option.
+</small>
 
 <a
 class="release-link"
